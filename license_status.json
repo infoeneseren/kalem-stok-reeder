@@ -1,0 +1,14 @@
+{
+    "status": "ACTIVE",
+    "message": "Uygulama aktif",
+    "version": "1.0.0",
+    "expiry_date": null,
+    "last_updated": "2026-02-02",
+    
+    "_comment_status_options": [
+        "ACTIVE - Uygulama çalışır",
+        "DISABLED - Uygulama devre dışı, çalışmaz",
+        "MAINTENANCE - Bakım modu, çalışmaz"
+    ],
+    "_comment_expiry_date": "Tarih formatı: YYYY-MM-DD (örn: 2026-12-31) veya null"
+}
