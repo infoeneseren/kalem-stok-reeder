@@ -1,13 +1,11 @@
 """
 Excel Seri Arama - İş Mantığı
 Kalem stok arama ve eşleştirme sistemi
-Multiprocessing ile hızlandırılmış versiyon
 """
 import pandas as pd
 import os
 import datetime
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
-import multiprocessing as mp
+from concurrent.futures import ThreadPoolExecutor
 
 
 class ExcelSeriArama:
@@ -20,9 +18,6 @@ class ExcelSeriArama:
         self.datakalem_df = None
         self.seri_sutun_index = None
         self.lookup_dict = None  # Önbelleklenmiş lookup dictionary
-        
-        # CPU sayısı
-        self.cpu_count = max(1, mp.cpu_count() - 1)  # 1 CPU'yu sistem için bırak
 
     def log_mesaj(self, mesaj):
         """Debug log mesajı yazdırır"""
@@ -176,8 +171,8 @@ class ExcelSeriArama:
                 return row_data
             
             # Paralel işleme
-            self.log_mesaj("Paralel XML işleme başlıyor...")
-            with ThreadPoolExecutor(max_workers=self.cpu_count) as executor:
+            self.log_mesaj("XML işleme başlıyor...")
+            with ThreadPoolExecutor(max_workers=4) as executor:
                 data = list(executor.map(process_row, rows))
             
             # Boş satırları filtrele
@@ -221,7 +216,7 @@ class ExcelSeriArama:
             return f"HATA: {str(e)}"
 
     def datakalem_lookup_dict_olustur(self):
-        """DataKalem DataFrame'inden hızlı arama için dictionary oluşturur - Paralel"""
+        """DataKalem DataFrame'inden hızlı arama için dictionary oluşturur"""
         if self.datakalem_df is None or self.datakalem_df.empty:
             return {}
 
@@ -229,67 +224,23 @@ class ExcelSeriArama:
         if self.lookup_dict is not None:
             return self.lookup_dict
 
-        self.log_mesaj("Lookup dictionary oluşturuluyor (paralel)...")
-        
-        # DataFrame'i numpy array'e çevir (daha hızlı erişim)
+        self.log_mesaj("Lookup dictionary oluşturuluyor...")
+
+        lookup_dict = {}
+        lookup_sutun = self.datakalem_df.iloc[:, 1]  # B sütunu
         df_values = self.datakalem_df.values
-        lookup_sutun = self.datakalem_df.iloc[:, 1].values  # B sütunu
-        
-        def process_chunk(args):
-            start_idx, end_idx = args
-            chunk_dict = {}
-            for i in range(start_idx, end_idx):
-                deger = lookup_sutun[i]
+
+        for index, deger in enumerate(lookup_sutun):
             temiz_deger = self.veri_temizle(deger)
             if temiz_deger:
-                    chunk_dict[temiz_deger] = list(df_values[i])
-            return chunk_dict
-        
-        # Chunk'lara böl
-        total_rows = len(lookup_sutun)
-        chunk_size = max(1000, total_rows // (self.cpu_count * 2))
-        chunks = [(i, min(i + chunk_size, total_rows)) 
-                  for i in range(0, total_rows, chunk_size)]
-        
-        self.log_mesaj(f"{len(chunks)} chunk'ta {total_rows} satır işlenecek")
-        
-        # Paralel işleme
-        lookup_dict = {}
-        with ThreadPoolExecutor(max_workers=self.cpu_count) as executor:
-            results = executor.map(process_chunk, chunks)
-            for chunk_dict in results:
-                lookup_dict.update(chunk_dict)
+                lookup_dict[temiz_deger] = list(df_values[index])
 
         self.lookup_dict = lookup_dict  # Önbelleğe al
         self.log_mesaj(f"Lookup dictionary oluşturuldu: {len(lookup_dict)} kayıt")
         return lookup_dict
-    
-    def _vlookup_chunk(self, args):
-        """Paralel VLOOKUP için chunk işleme fonksiyonu"""
-        chunk, lookup_dict, sutun_indexleri = args
-        sonuclar = []
-        
-        for seri in chunk:
-            temiz_seri = self.veri_temizle(seri)
-            row_sonuc = {'seri': temiz_seri}
-            
-            if temiz_seri in lookup_dict:
-                row_data = lookup_dict[temiz_seri]
-                for sutun_adi, idx in sutun_indexleri.items():
-                    if idx < len(row_data):
-                        row_sonuc[sutun_adi] = self.veri_temizle(row_data[idx])
-                    else:
-                        row_sonuc[sutun_adi] = "BULUNAMADI"
-            else:
-                for sutun_adi in sutun_indexleri.keys():
-                    row_sonuc[sutun_adi] = "BULUNAMADI"
-            
-            sonuclar.append(row_sonuc)
-        
-        return sonuclar
 
     def sonuc_tablosu_olustur(self):
-        """Sonuç tablosunu oluşturur - Paralel işleme ile hızlandırılmış"""
+        """Sonuç tablosunu oluşturur"""
         if self.veri_df is None or self.datakalem_df is None:
             print("Hata: Önce Excel dosyalarını yükleyin!")
             return None
@@ -298,51 +249,28 @@ class ExcelSeriArama:
             print("Hata: Seri numarası sütunu bulunamadı!")
             return None
 
-        self.log_mesaj("Paralel arama başlıyor...")
+        self.log_mesaj("Arama başlıyor...")
 
         # Lookup dictionary oluştur
         lookup_dict = self.datakalem_lookup_dict_olustur()
 
         # Veri Excel'indeki seri numaralarını al
-        seri_numaralari = self.veri_df.iloc[:, self.seri_sutun_index].dropna().tolist()
-        toplam = len(seri_numaralari)
-        self.log_mesaj(f"Toplam {toplam} seri numarası aranacak")
-
-        # Sütun indexleri
-        sutun_indexleri = {
-            'KALEM': 3,
-            'MODEL': 4,
-            'KONUM': 6,
-            'DURUM': 7,
-            'KALEM_IC_KIMLIK': 12
-        }
-
-        # Chunk boyutu hesapla
-        chunk_size = max(100, toplam // (self.cpu_count * 4))
-        chunks = [seri_numaralari[i:i+chunk_size] for i in range(0, toplam, chunk_size)]
-        self.log_mesaj(f"{len(chunks)} chunk, her biri ~{chunk_size} kayıt")
-
-        # Paralel işleme
-        all_results = []
+        seri_numaralari = self.veri_df.iloc[:, self.seri_sutun_index].dropna()
+        temiz_seri_numaralari = [self.veri_temizle(sn) for sn in seri_numaralari]
         
-        # ThreadPoolExecutor kullan (I/O bound işlemler için daha verimli)
-        with ThreadPoolExecutor(max_workers=self.cpu_count) as executor:
-            chunk_args = [(chunk, lookup_dict, sutun_indexleri) for chunk in chunks]
-            
-            for i, result in enumerate(executor.map(self._vlookup_chunk, chunk_args)):
-                all_results.extend(result)
-                if (i + 1) % 10 == 0:
-                    self.log_mesaj(f"İşlenen chunk: {i+1}/{len(chunks)}")
-
-        self.log_mesaj("Sonuç DataFrame oluşturuluyor...")
+        toplam = len(temiz_seri_numaralari)
+        self.log_mesaj(f"Toplam {toplam} seri numarası aranacak")
 
         # Sonuç DataFrame'i oluştur
         sonuc_df = pd.DataFrame()
-        sonuc_df['SERİ NUMARA'] = [r['seri'] for r in all_results]
-        sonuc_df['KALEM'] = [r['KALEM'] for r in all_results]
-        sonuc_df['MODEL'] = [r['MODEL'] for r in all_results]
-        sonuc_df['KONUM'] = [r['KONUM'] for r in all_results]
-        sonuc_df['DURUM'] = [r['DURUM'] for r in all_results]
+        sonuc_df['SERİ NUMARA'] = temiz_seri_numaralari
+
+        # VLOOKUP işlemleri
+        self.log_mesaj("VLOOKUP işlemleri yapılıyor...")
+        sonuc_df['KALEM'] = [self.vlookup_arama_optimized(x, lookup_dict, 3) for x in temiz_seri_numaralari]
+        sonuc_df['MODEL'] = [self.vlookup_arama_optimized(x, lookup_dict, 4) for x in temiz_seri_numaralari]
+        sonuc_df['KONUM'] = [self.vlookup_arama_optimized(x, lookup_dict, 6) for x in temiz_seri_numaralari]
+        sonuc_df['DURUM'] = [self.vlookup_arama_optimized(x, lookup_dict, 7) for x in temiz_seri_numaralari]
 
         # BİRLEŞTİR sütunu
         sonuc_df['BİRLEŞTİR'] = sonuc_df['KALEM'].astype(str) + ' ' + sonuc_df['MODEL'].astype(str)
@@ -354,8 +282,8 @@ class ExcelSeriArama:
             lambda x: 'BULUNAMADI' if x == 'BULUNAMADI' else kalem_adetleri.get(x, 0)
         )
 
-        # KALEM İÇ KİMLİK sütunu
-        sonuc_df['KALEM İÇ KİMLİK'] = [r['KALEM_IC_KIMLIK'] for r in all_results]
+        # KALEM İÇ KİMLİK sütunu (index 12)
+        sonuc_df['KALEM İÇ KİMLİK'] = [self.vlookup_arama_optimized(x, lookup_dict, 12) for x in temiz_seri_numaralari]
 
         self.log_mesaj(f"Arama tamamlandı: {len(sonuc_df)} sonuç")
         return sonuc_df
@@ -398,7 +326,7 @@ if __name__ == "__main__":
     # Format: https://raw.githubusercontent.com/KULLANICI/REPO/main/license_status.json
     # Örnek: https://raw.githubusercontent.com/AhmetReeder/kalem-stok-app/main/license_status.json
     
-    GITHUB_LICENSE_URL = "https://raw.githubusercontent.com/KULLANICI_ADI/REPO_ADI/main/license_status.json"
+    GITHUB_LICENSE_URL = "https://raw.githubusercontent.com/infoeneseren/kalem-stok-reeder/refs/heads/main/license_status.json"
     
     # Offline modda çalışmaya izin ver (False = daha güvenli)
     LicenseChecker.ALLOW_OFFLINE = False
