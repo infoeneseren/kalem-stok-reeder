@@ -44,12 +44,19 @@ class LicenseChecker:
             # SSL context oluştur
             context = ssl.create_default_context()
             
+            # Cache bypass için timestamp ekle
+            import time
+            cache_buster = int(time.time())
+            url_with_cache_buster = f"{cls.LICENSE_URL}?t={cache_buster}"
+            
             # GitHub'dan lisans dosyasını oku
             request = urllib.request.Request(
-                cls.LICENSE_URL,
+                url_with_cache_buster,
                 headers={
                     'User-Agent': 'KalemStokApp/1.0',
-                    'Cache-Control': 'no-cache'
+                    'Cache-Control': 'no-cache, no-store, must-revalidate',
+                    'Pragma': 'no-cache',
+                    'Expires': '0'
                 }
             )
             

@@ -289,6 +289,7 @@ class ExcelSeriArama:
         return sonuc_df
 
     def datakalem_excel_yukle_with_progress(self, dosya_yolu, progress_callback=None):
+        
         """DataKalem Excel dosyasını yükler"""
         self.datakalem_excel_path = dosya_yolu
         self.datakalem_df = self.excel_oku(dosya_yolu)
