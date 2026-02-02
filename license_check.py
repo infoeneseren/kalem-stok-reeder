@@ -18,7 +18,7 @@ class LicenseChecker:
     
     # GitHub Raw URL - Bu URL'yi kendi repo'nuza göre değiştirin
     # Format: https://raw.githubusercontent.com/KULLANICI/REPO/BRANCH/license_status.json
-    LICENSE_URL = "https://raw.githubusercontent.com/KULLANICI_ADI/REPO_ADI/main/license_status.json"
+    LICENSE_URL = "https://raw.githubusercontent.com/infoeneseren/kalem-stok-reeder/main/license_status.json"
     
     # Yedek URL (Gist kullanımı için)
     BACKUP_URL = None

@@ -322,11 +322,8 @@ if __name__ == "__main__":
     from license_check import LicenseChecker, check_and_run
     
     # ==================== LİSANS AYARLARI ====================
-    # GitHub'a yükledikten sonra bu URL'yi güncelleyin!
-    # Format: https://raw.githubusercontent.com/KULLANICI/REPO/main/license_status.json
-    # Örnek: https://raw.githubusercontent.com/AhmetReeder/kalem-stok-app/main/license_status.json
-    
-    GITHUB_LICENSE_URL = "https://raw.githubusercontent.com/infoeneseren/kalem-stok-reeder/refs/heads/main/license_status.json"
+    # GitHub Raw URL
+    GITHUB_LICENSE_URL = "https://raw.githubusercontent.com/infoeneseren/kalem-stok-reeder/main/license_status.json"
     
     # Offline modda çalışmaya izin ver (False = daha güvenli)
     LicenseChecker.ALLOW_OFFLINE = False
